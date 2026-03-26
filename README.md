@@ -92,3 +92,7 @@ pipeline:
   │   │   ├── netcdf
   │   │   ├── pickle
 ```
+
+**Example**
+
+<img width="859" height="701" alt="FP_map_YOUNG_2022_07" src="https://github.com/user-attachments/assets/538ce4e8-59cd-4749-840c-f238b32c249a" />
