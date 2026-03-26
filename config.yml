@@ -1,0 +1,65 @@
+database:
+  base_path: "C:/Users/joyso/Matlab/local_database_new1"
+  years:
+    - 2022
+  site_name:
+    - "YOUNG"
+  levels:
+    - "Clean/ThirdStage"
+tower_height:
+  - 4.08
+variables:
+  variables_to_read:
+    - WS_1_1_1
+    - hpbl
+    - L
+    - V_SIGMA
+    - USTAR
+    - WD_1_1_1
+lat_lon:
+  lat: 50.3623 
+  lon: -100.2024
+# -----------------------------
+# PIPELINE CONTROL
+# -----------------------------
+pipeline:
+  run_single_ffp: 0
+  run_monthly_ffp: 1
+  run_ndvi_extraction: 0
+  run_plot_ffp: 0
+# plot:
+#   zoom_radius: 500
+
+# -----------------------------
+# FFP SETTINGS
+# -----------------------------
+# ffp:
+#   required_columns:
+#     - WS_1_1_1
+#     - hpbl
+#     - L
+#     - V_SIGMA
+#     - USTAR
+#     - WD_1_1_1
+#     - Zm
+
+#   domain: [-2000, 2000, -2000, 2000]
+#   nx: 300
+#   ny: 300
+#   rs: [20., 40., 60., 80.]
+
+#   min_points: 50
+#   smooth_data: 1
+#   crop: 0
+
+# -----------------------------
+# NDVI SETTINGS (GEE)
+# -----------------------------
+# ndvi:
+#   dataset: "LANDSAT/LC08/C02/T1_L2"
+#   dataset_2: "LANDSAT/LC09/C02/T1_L2"
+
+#   method: "all_images"   # options: all_images | monthly_median
+
+#   scale: 30
+#   cloud_mask: 1
