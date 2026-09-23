@@ -10,6 +10,17 @@ from FFP_module import (
     load_database_data,
     monthly_ffp_pipeline,
     single_ffp_plot,
+    
+)
+
+from FFP_module.gee_ndvi import (
+    init_gee,
+    single_ndvi,
+    monthly_ndvi,
+    monthly_ndvi_timeseries,
+   
+    get_ffp_union_geometry,
+    load_monthly_ffp
 )
 
 import yaml
@@ -17,6 +28,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import xarray as xr
+import pickle
 
 
 import pyproj as pyproj
@@ -95,6 +107,8 @@ ffp_df = ffp_df[
 
 print(f"Number of valid rows: {len(ffp_df)}")
 
+
+
 #test in first 200 rows
 # ffp_df = ffp_df.iloc[:100].copy() # remove this later, this is for testing
 
@@ -102,13 +116,20 @@ print(f"Number of valid rows: {len(ffp_df)}")
 # Run single cumulative FFP
 # -----------------------------
 if config["pipeline"].get("run_single_ffp", 0) == 1:
-    FFP, ds_single = single_ffp_plot(ffp_df, z_ref, site_name[0], years[0], config)
+    FFP = single_ffp_plot(ffp_df, z_ref, site_name[0], years[0], config)
 
 # -----------------------------
 # Run Monthly FFP
 # -----------------------------
-if config["pipeline"].get("run_monthly_ffp",0) == 1:
-    monthly_ffp_pipeline(df2, z_ref, site_name[0], years[0], config)
+if config["pipeline"].get("run_monthly_ffp", 0) == 1:
+
+    monthly_contours = monthly_ffp_pipeline(
+        df2, z_ref, site_name[0], years[0], config
+    )
+
+else:
+
+    monthly_contours = load_monthly_ffp(config)
 
 # -----------------------------
 # Step 2: plotting (independent)
@@ -121,11 +142,76 @@ if config["pipeline"].get("run_monthly_ffp",0) == 1:
 # -----------------------------
 # Run NDVI Extraction
 # -----------------------------
-if config["pipeline"]["run_ndvi_extraction"]:
-    print("Running NDVI extraction...")
-    # run_ndvi_from_config(config)
-else:
-    print("Skipping NDVI extraction")
+if config["pipeline"].get("run_ndvi_extraction", 0) == 1:
+
+    print("Starting NDVI pipeline...")
+
+    init_gee(config)
+
+    # --------------------------------
+    # INPUT from Geo_FFP
+    # --------------------------------
+    # monthly_contours = ffp_results["contours_80"]
+
+    lat = config["lat_lon"]["lat"]
+    lon = config["lat_lon"]["lon"]
+
+    geom = get_ffp_union_geometry(config, monthly_contours, lat, lon)
+   
+
+    # --------------------------------
+    # 1. Single NDVI
+    # --------------------------------
+    # img_single = single_ndvi(geom, config)
+    # export_tif(img_single, geom, "NDVI_full_period", config)
+
+    # --------------------------------
+    # 2. Monthly NDVI
+    # --------------------------------
+    # monthly = monthly_ndvi(geom, config)
+
+    # for m, img in monthly.items():
+    #     export_tif(img, geom, f"NDVI_{m}", config)
+
+    # --------------------------------
+    # 3. Time series
+    # --------------------------------
+    ts = monthly_ndvi_timeseries(geom, config)
+
+    df = pd.DataFrame(ts)
+    df.to_csv(config["output"]["ndvi_csv"], index=False)
+
+    print("NDVI pipeline completed successfully")
+# -----------------------------
+# Plotting timeseries NDVI
+# -----------------------------
+    plt.figure(figsize=(10,4))
+
+    plt.plot(df["month"], df["NDVI"], marker="o")
+
+    plt.xticks(rotation=45)
+    plt.ylabel("NDVI")
+    plt.xlabel("Month")
+    plt.title(f"Monthly NDVI Time Series ({site_name[0]}, {years[0]})")
+    plt.grid(True)
+
+
+    plt.savefig(config["output"]["ndvi_plot"], dpi=100, bbox_inches="tight")
+
+    plt.show()
+
+# -----------------------------
+# Plotting timeseries NDVI
+# -----------------------------
+#     plot_ffp_with_ndvi(
+#     FFP,
+#     img_single,
+#     lat,
+#     lon,
+#     site_name,
+#     years[0],
+#     config
+# )
 
 #OPTIONAL: 
 # -----------------------------
