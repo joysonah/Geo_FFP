@@ -1,6 +1,8 @@
 # ffp_module/__init__.py
 
 # Core FFP
+from FFP_module import gee_ndvi
+
 from .calc_footprint_FFP import FFP
 from .calc_footprint_FFP_climatology import FFP_climatology
 
@@ -16,6 +18,7 @@ __all__ = [
     "load_database_data",
     "monthly_ffp_pipeline",
     "single_ffp_plot",
+    "gee_ndvi"
     
 ]
 

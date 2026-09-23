@@ -4,6 +4,8 @@ import pickle
 import numpy as np
 import pandas as pd
 import xarray as xr
+import rioxarray
+import netCDF4
 import pyproj as pyproj
 import matplotlib.pyplot as plt
 import contextily as ctx
@@ -12,6 +14,7 @@ from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 from matplotlib.patches import FancyArrowPatch
 
 from FFP_module.calc_footprint_FFP_climatology import FFP_climatology
+from FFP_module.ffp_export import (export_ffp_single, export_ffp_monthly, get_utm_crs, get_tower_coordinates)
 
 ## FFP single/cumulative Climatology Module
 def single_ffp_plot(ffp_df, z_ref, site_name, year, config, save_pickle=True, save_nc=True):
@@ -50,32 +53,61 @@ def single_ffp_plot(ffp_df, z_ref, site_name, year, config, save_pickle=True, sa
             pickle.dump(FFP, f)
         print(f"Full FFP object saved: {pickle_file}")
 
-    # -----------------------------
-    # 3. Save single NetCDF
-    # -----------------------------
-    if save_nc:
-        nc_path = os.path.join(
-            config["database"]["base_path"], "FFP_output", site_name, str(year), "netcdf"
-        )
-        os.makedirs(nc_path, exist_ok=True)
-        nc_file = os.path.join(nc_path, f"FFP_single_{site_name}_{year}.nc")
+#     # -----------------------------
+#     # 3. Save single NetCDF
+#     # -----------------------------
+#     if save_nc:
+#         nc_path = os.path.join(
+#             config["database"]["base_path"], "FFP_output", site_name, str(year), "netcdf"
+#         )
+#         os.makedirs(nc_path, exist_ok=True)
+#         nc_file = os.path.join(nc_path, f"FFP_single_{site_name}_{year}.nc")
 
-        ds = xr.Dataset(
-            {
-                "fclim": (["y", "x"], FFP["fclim_2d"])
-            },
-            coords={
-                "x": (["x"], FFP["x_2d"][0, :]),
-                "y": (["y"], FFP["y_2d"][:, 0])
-            },
-            attrs={
-                "description": f"Single footprint grid for {site_name}, {year}",
-                "units": "m-2"
-            }
+#         # convert grid
+#         wgs84 = pyproj.CRS('EPSG:4326')
+#         mercator = pyproj.CRS('EPSG:3857')
+#         proj = pyproj.Transformer.from_crs(wgs84, mercator, always_xy=True)
+#         x0, y0 = proj.transform(lon0, lat0)
+
+#         ds = xr.Dataset(
+#             {
+#                 "fclim": (["y", "x"], FFP["fclim_2d"])
+#             },
+#             coords={
+#                 "x": (["x"], FFP["x_2d"][0, :]+x0),
+#                 "y": (["y"], FFP["y_2d"][:, 0]+y0)
+#             },
+#             attrs={
+#                 "description": f"Single footprint grid for {site_name}, {year}",
+#                 "units": "m-2"
+#             }
+#         )
+
+#         ds.rio.write_crs(mercator, inplace=True)
+#         ds4326 = ds.rio.reproject(wgs84)
+        # # -----------------------------
+        # # Save NetCDF
+        # # -----------------------------
+#         ds4326.to_netcdf(nc_file)
+#         print(f"Single FFP NetCDF saved: {nc_file}")
+
+        # # -----------------------------
+        # # Save NetCDF. Geotiff and Shapefile contour
+        # # -----------------------------
+        output_dir = os.path.join(
+            config["database"]["base_path"],
+            "FFP_output",
+            site_name,
+            str(year)
         )
 
-        ds.to_netcdf(nc_file)
-        print(f"Single FFP NetCDF saved: {nc_file}")
+        export_ffp_single(
+        FFP=FFP,
+        site_name=site_name,
+        year=year,
+        config=config,
+        output_dir=output_dir
+        )
 
     # -----------------------------
     # 4. Plot single map
@@ -141,130 +173,600 @@ def single_ffp_plot(ffp_df, z_ref, site_name, year, config, save_pickle=True, sa
     plt.close(fig)
     print(f"Single FFP map saved: {map_file}")
 
-    return FFP, ds
+    return FFP
 
-# ## FFP Monthly Climatology Module
+# ============================================================
+# FFP Monthly Climatology Pipeline
+# ============================================================
+
 def monthly_ffp_pipeline(df, z_ref, site_name, year, config):
     """
-    Compute FFP climatology for each month and save:
-    - full FFP object (Pickle)
-    - gridded NetCDF
-    - footprint map (PNG)
+    Compute monthly FFP climatologies and save:
+
+    1. Individual monthly FFP pickle files
+    2. One combined annual/monthly FFP pickle containing all months
+    3. One combined NetCDF
+    4. One 12-band GeoTIFF
+    5. One contour shapefile containing all months
+    6. One tower shapefile
+    7. Individual monthly PNG maps
+
+    Returns
+    -------
+    dict
+        Dictionary containing monthly FFP objects and output paths.
     """
+
+    # ========================================================
+    # 1. Basic information
+    # ========================================================
+
+    lat0 = float(config["lat_lon"]["lat"])
+    lon0 = float(config["lat_lon"]["lon"])
+
+    base_path = config["database"]["base_path"]
+
+    # Main output directory
+    output_dir = os.path.join(
+        base_path,
+        "FFP_output",
+        site_name,
+        str(year)
+    )
+
+    # Subdirectories
+    pickle_dir = os.path.join(output_dir, "pickle")
+    netcdf_dir = os.path.join(output_dir, "netcdf")
+    geotiff_dir = os.path.join(output_dir, "geotiff")
+    shapefile_dir = os.path.join(output_dir, "shapefile")
+    map_dir = os.path.join(
+        output_dir,
+        "map",
+        "Monthly_FFP_maps"
+    )
+
+    # Create directories
+    for directory in [
+        pickle_dir,
+        netcdf_dir,
+        geotiff_dir,
+        shapefile_dir,
+        map_dir
+    ]:
+        os.makedirs(directory, exist_ok=True)
+
+    # ========================================================
+    # 2. UTM projection
+    # ========================================================
+
+    crs_utm = get_utm_crs(lat0, lon0)
+
+    x0, y0 = get_tower_coordinates(
+        lat0,
+        lon0,
+        crs_utm
+    )
+
+    print("\n==============================================")
+    print("Monthly FFP climatology")
+    print("==============================================")
+    print(f"Site       : {site_name}")
+    print(f"Year       : {year}")
+    print(f"Latitude   : {lat0}")
+    print(f"Longitude  : {lon0}")
+    print(f"Projection : {crs_utm.to_string()}")
+    print(f"Output     : {output_dir}")
+    print("==============================================\n")
+
+    # ========================================================
+    # 3. Container for all monthly FFP objects
+    # ========================================================
+
+    FFP_monthly = {}
+
+    # ========================================================
+    # 4. Group data by month
+    # ========================================================
 
     months = df.groupby(pd.Grouper(freq="MS"))
 
-    lat0, lon0 = config["lat_lon"]["lat"], config["lat_lon"]["lon"]
-    wgs84 = pyproj.CRS("EPSG:4326")
-    mercator = pyproj.CRS("EPSG:3857")
-    proj = pyproj.Transformer.from_crs(wgs84, mercator, always_xy=True)
-    x0, y0 = proj.transform(lon0, lat0)
+    # ========================================================
+    # 5. Calculate FFP for each month
+    # ========================================================
 
     for month_start, g in months:
-        g = g.dropna(subset=["WS_1_1_1","hpbl","L","V_SIGMA","USTAR","WD_1_1_1"]).copy()
-        if len(g) < 50:
-            print(f"Skipping {month_start:%Y-%m}: too few valid points ({len(g)})")
-            continue
 
-        print(f"Running FFP for {month_start:%Y-%m}, n={len(g)}")
+        month_number = month_start.month
+        month_str = month_start.strftime("%Y_%m")
 
-        # Compute FFP climatology for the month
+        # ----------------------------------------------------
+        # Remove invalid meteorological observations
+        # ----------------------------------------------------
+
+        required_columns = [
+            "WS_1_1_1",
+            "hpbl",
+            "L",
+            "V_SIGMA",
+            "USTAR",
+            "WD_1_1_1",
+            "Zm"
+        ]
+
+        g = g.dropna(
+            subset=required_columns
+        ).copy()
+
+        # # ----------------------------------------------------
+        # # Minimum number of observations
+        # # ----------------------------------------------------
+
+        # if len(g) < 50:
+
+        #     print(
+        #         f"Skipping {month_start:%Y-%m}: "
+        #         f"too few valid points ({len(g)})"
+        #     )
+
+        #     continue
+
+        # print(
+        #     f"Running FFP for {month_start:%Y-%m}, "
+        #     f"n={len(g)}"
+        # )
+
+        # ====================================================
+        # 6. Run FFP climatology
+        # ====================================================
+
         FFP = FFP_climatology(
+
             zm=float(g["Zm"].median()),
+
             z0=None,
+
             umean=g["WS_1_1_1"].tolist(),
+
             h=g["hpbl"].tolist(),
+
             ol=g["L"].tolist(),
+
             sigmav=g["V_SIGMA"].tolist(),
+
             ustar=g["USTAR"].tolist(),
+
             wind_dir=g["WD_1_1_1"].tolist(),
-            domain=[-2000, 2000, -2000, 2000],
+
+            domain=[
+                -2000,
+                2000,
+                -2000,
+                2000
+            ],
+
             nx=300,
             ny=300,
-            rs=[20., 40., 60., 80.],
+
+            rs=[
+                20.,
+                40.,
+                60.,
+                80.
+            ],
+
             smooth_data=1,
+
             crop=0,
+
             pulse=100,
+
             verbosity=0,
+
             fig=0
         )
 
-        month_str = month_start.strftime("%Y_%m")
+        # ====================================================
+        # 7. Store FFP object in monthly dictionary
+        # ====================================================
 
-        # -----------------------------
-        # 1. Save full FFP object (Pickle)
-        # -----------------------------
-        pickle_path = os.path.join(config["database"]["base_path"], "FFP_output", site_name, str(year), "pickle")
-        os.makedirs(pickle_path, exist_ok=True)
-        pickle_file = os.path.join(pickle_path, f"FFP_full_{site_name}_{month_str}.pkl")
-        with open(pickle_file, "wb") as f:
-            pickle.dump(FFP, f)
-        print(f"Saved full FFP object: {pickle_file}")
+        FFP_monthly[month_number] = FFP
 
-        # -----------------------------
-        # 2. Save NetCDF
-        # -----------------------------
-        nc_path = os.path.join(config["database"]["base_path"], "FFP_output", site_name, str(year), "netcdf")
-        os.makedirs(nc_path, exist_ok=True)
-        nc_file = os.path.join(nc_path, f"FFP_monthly_{site_name}_{month_str}.nc")
+        # ====================================================
+        # 8. Save individual monthly pickle
+        # ====================================================
 
-        ds = xr.Dataset(
-            {
-                "fclim": (["y","x"], FFP["fclim_2d"])
-            },
-            coords={
-                "x": (["x"], FFP["x_2d"][0,:]),
-                "y": (["y"], FFP["y_2d"][:,0])
-            },
-            attrs={"description": f"Monthly footprint for {site_name} {month_str}"}
+        monthly_pickle = os.path.join(
+            pickle_dir,
+            f"FFP_full_{site_name}_{year}_{month_number:02d}.pkl"
         )
-        ds.to_netcdf(nc_file)
-        print(f"Saved NetCDF: {nc_file}")
 
-        # -----------------------------
-        # 3. Plot single map
-        # -----------------------------
+        with open(
+            monthly_pickle,
+            "wb"
+        ) as f:
+
+            pickle.dump(
+                FFP,
+                f,
+                protocol=pickle.HIGHEST_PROTOCOL
+            )
+
+        print(
+            f"  Saved pickle: "
+            f"{os.path.basename(monthly_pickle)}"
+        )
+
+        # ====================================================
+        # 9. Create monthly PNG map
+        # ====================================================
+
         X_abs = FFP["x_2d"] + x0
         Y_abs = FFP["y_2d"] + y0
+
         Z = FFP["fclim_2d"]
 
-        fig, ax = plt.subplots(figsize=(10, 8))
-        cs = ax.contourf(X_abs, Y_abs, Z, levels=100, cmap="viridis", alpha=0.4)
-        plt.colorbar(cs, label="Footprint Weight (m$^{-2}$)")
+        fig, ax = plt.subplots(
+            figsize=(10, 8)
+        )
 
-        for i, rs_val in enumerate(FFP["rs"]):
-            if FFP["xr"][i] is not None and FFP["yr"][i] is not None:
-                xr_arr = np.array(FFP["xr"][i]) + x0
-                yr_arr = np.array(FFP["yr"][i]) + y0
-                ax.plot(xr_arr, yr_arr, linewidth=1, label=f"{int(rs_val*100)}%")
+        # ----------------------------------------------------
+        # Continuous footprint
+        # ----------------------------------------------------
 
-        ax.scatter(x0, y0, c="red", marker="^", s=80, label="Tower")
+        contourf = ax.contourf(
+            X_abs,
+            Y_abs,
+            Z,
+            levels=30
+        )
 
-        # Zoom 80% contour
-        idx80 = next((i for i, r in enumerate(FFP["rs"]) if r in [80,0.8]), None)
-        if idx80 is not None and FFP["xr"][idx80] is not None:
-            xr80 = np.array(FFP["xr"][idx80]) + x0
-            yr80 = np.array(FFP["yr"][idx80]) + y0
-            margin = 50
-            ax.set_xlim(xr80.min() - margin, xr80.max() + margin)
-            ax.set_ylim(yr80.min() - margin, yr80.max() + margin)
+        cbar = fig.colorbar(
+            contourf,
+            ax=ax
+        )
 
-        google_sat = "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
-        ctx.add_basemap(ax, source=google_sat, crs="EPSG:3857")
+        cbar.set_label(
+            "Footprint density (m$^{-2}$)"
+        )
 
-        ax.set_xlabel("x [m]")
-        ax.set_ylabel("y [m]")
-        ax.set_title(f"Monthly Footprint Map ({site_name}, {month_str})")
+        # ----------------------------------------------------
+        # FFP isopleth contours
+        # ----------------------------------------------------
+
+        rs_values = FFP["rs"]
+
+        contour = ax.contour(
+            X_abs,
+            Y_abs,
+            Z,
+            levels=rs_values
+        )
+
+        # ----------------------------------------------------
+        # Label contours
+        # ----------------------------------------------------
+
+        labels = {}
+
+        for rs_val in rs_values:
+
+            if rs_val <= 1:
+                labels[rs_val] = (
+                    f"{int(rs_val * 100)}%"
+                )
+            else:
+                labels[rs_val] = (
+                    f"{int(rs_val)}%"
+                )
+
+        fmt = {
+            level: labels.get(
+                level,
+                str(level)
+            )
+            for level in contour.levels
+        }
+
+        ax.clabel(
+            contour,
+            inline=True,
+            fontsize=9,
+            fmt=fmt
+        )
+
+        # ----------------------------------------------------
+        # Tower location
+        # ----------------------------------------------------
+
+        ax.scatter(
+            x0,
+            y0,
+            marker="^",
+            s=100,
+            edgecolor="black",
+            zorder=10,
+            label="EC tower"
+        )
+
+        # ----------------------------------------------------
+        # Labels
+        # ----------------------------------------------------
+
+        ax.set_xlabel(
+            "Easting (m)"
+        )
+
+        ax.set_ylabel(
+            "Northing (m)"
+        )
+
+        ax.set_title(
+            f"{site_name} FFP Climatology — "
+            f"{month_start:%Y-%m}"
+        )
+
         ax.legend()
 
-        map_path = os.path.join(config["database"]["base_path"], "FFP_output", site_name, str(year), "map", "Monthly_FFP_maps")
-        os.makedirs(map_path, exist_ok=True)
-        map_file = os.path.join(map_path, f"FP_map_{site_name}_{month_str}.png")
-        plt.savefig(map_file, dpi=100, bbox_inches="tight")
-        plt.close(fig)
-        print(f"Saved map: {map_file}")
+        ax.set_aspect(
+            "equal",
+            adjustable="box"
+        )
 
-    print("Monthly FFP processing complete.")
+        # ----------------------------------------------------
+        # Save PNG
+        # ----------------------------------------------------
+
+        png_file = os.path.join(
+            map_dir,
+            f"FP_map_{site_name}_{year}_{month_number:02d}.png"
+        )
+
+        plt.tight_layout()
+
+        plt.savefig(
+            png_file,
+            dpi=300,
+            bbox_inches="tight"
+        )
+
+        plt.close(fig)
+
+        print(
+            f"  Saved map: "
+            f"{os.path.basename(png_file)}"
+        )
+
+    # ========================================================
+    # 10. Check whether any months were successfully processed
+    # ========================================================
+
+    if len(FFP_monthly) == 0:
+
+        print(
+            "\nNo valid monthly FFP calculations."
+        )
+
+        return None
+
+    # ========================================================
+    # 11. Save ALL monthly FFP objects into ONE pickle
+    # ========================================================
+
+    combined_pickle = os.path.join(
+        pickle_dir,
+        f"FFP_monthly_{site_name}_{year}.pkl"
+    )
+
+    with open(
+        combined_pickle,
+        "wb"
+    ) as f:
+
+        pickle.dump(
+            FFP_monthly,
+            f,
+            protocol=pickle.HIGHEST_PROTOCOL
+        )
+
+    print("\n==============================================")
+    print("Combined monthly FFP pickle saved")
+    print("==============================================")
+    print(combined_pickle)
+    print(
+        f"Months included: "
+        f"{sorted(FFP_monthly.keys())}"
+    )
+    print("==============================================\n")
+
+    # ========================================================
+    # 12. Export combined GIS products
+    # ========================================================
+
+    combined_outputs = export_ffp_monthly(
+        FFP_monthly=FFP_monthly,
+        site_name=site_name,
+        year=year,
+        config=config,
+        output_dir=output_dir
+    )
+
+    # ========================================================
+    # 13. Add combined pickle to output dictionary
+    # ========================================================
+
+    combined_outputs["pickle"] = combined_pickle
+
+    # ========================================================
+    # 14. Print final summary
+    # ========================================================
+
+    print("\n==============================================")
+    print("FFP MONTHLY PIPELINE COMPLETE")
+    print("==============================================")
+
+    print(
+        f"Site: {site_name}"
+    )
+
+    print(
+        f"Year: {year}"
+    )
+
+    print(
+        f"Months calculated: "
+        f"{sorted(FFP_monthly.keys())}"
+    )
+
+    print("\nOutputs:")
+
+    for key, path in combined_outputs.items():
+
+        print(
+            f"  {key:10s}: {path}"
+        )
+
+    print("==============================================\n")
+
+    # ========================================================
+    # 15. Return results
+    # ========================================================
+
+    return {
+        "FFP_monthly": FFP_monthly,
+        "outputs": combined_outputs
+    }
+# # ## FFP Monthly Climatology Module
+# def monthly_ffp_pipeline(df, z_ref, site_name, year, config):
+#     """
+#     Compute FFP climatology for each month and save:
+#     - full FFP object (Pickle)
+#     - gridded NetCDF
+#     - footprint map (PNG)
+#     """
+
+#     months = df.groupby(pd.Grouper(freq="MS"))
+
+#     lat0, lon0 = config["lat_lon"]["lat"], config["lat_lon"]["lon"]
+#     wgs84 = pyproj.CRS("EPSG:4326")
+#     mercator = pyproj.CRS("EPSG:3857")
+#     proj = pyproj.Transformer.from_crs(wgs84, mercator, always_xy=True)
+#     x0, y0 = proj.transform(lon0, lat0)
+
+#     for month_start, g in months:
+#         g = g.dropna(subset=["WS_1_1_1","hpbl","L","V_SIGMA","USTAR","WD_1_1_1"]).copy()
+#         if len(g) < 50:
+#             print(f"Skipping {month_start:%Y-%m}: too few valid points ({len(g)})")
+#             continue
+
+#         print(f"Running FFP for {month_start:%Y-%m}, n={len(g)}")
+
+#         # Compute FFP climatology for the month
+#         FFP = FFP_climatology(
+#             zm=float(g["Zm"].median()),
+#             z0=None,
+#             umean=g["WS_1_1_1"].tolist(),
+#             h=g["hpbl"].tolist(),
+#             ol=g["L"].tolist(),
+#             sigmav=g["V_SIGMA"].tolist(),
+#             ustar=g["USTAR"].tolist(),
+#             wind_dir=g["WD_1_1_1"].tolist(),
+#             domain=[-2000, 2000, -2000, 2000],
+#             nx=300,
+#             ny=300,
+#             rs=[20., 40., 60., 80.],
+#             smooth_data=1,
+#             crop=0,
+#             pulse=100,
+#             verbosity=0,
+#             fig=0
+#         )
+
+#         month_str = month_start.strftime("%Y_%m")
+
+#         # -----------------------------
+#         # 1. Save full FFP object (Pickle)
+#         # -----------------------------
+#         pickle_path = os.path.join(config["database"]["base_path"], "FFP_output", site_name, str(year), "pickle")
+#         os.makedirs(pickle_path, exist_ok=True)
+#         pickle_file = os.path.join(pickle_path, f"FFP_full_{site_name}_{month_str}.pkl")
+#         with open(pickle_file, "wb") as f:
+#             pickle.dump(FFP, f)
+#         print(f"Saved full FFP object: {pickle_file}")
+
+#         # -----------------------------
+#         # 2. Save NetCDF
+#         # -----------------------------
+#         nc_path = os.path.join(config["database"]["base_path"], "FFP_output", site_name, str(year), "netcdf")
+#         os.makedirs(nc_path, exist_ok=True)
+#         nc_file = os.path.join(nc_path, f"FFP_monthly_{site_name}_{month_str}.nc")
+
+#         # # convert grid
+#         # wgs84 = pyproj.CRS('EPSG:4326')
+#         # mercator = pyproj.CRS('EPSG:3857')
+#         # proj = pyproj.Transformer.from_crs(wgs84, mercator, always_xy=True)
+#         # x0, y0 = proj.transform(lon0, lat0)	
+
+#         # ds = xr.Dataset(
+#         #     {
+#         #         "fclim": (["y","x"], FFP["fclim_2d"])
+#         #     },
+#         #     coords={
+#         #         "x": (["x"], FFP["x_2d"][0,:]+x0),
+#         #         "y": (["y"], FFP["y_2d"][:,0]+y0)
+#         #     },
+#         #     attrs={"description": f"Monthly footprint for {site_name} {month_str}"}
+#         # )
+
+#         # ds.rio.write_crs(mercator, inplace=True)
+#         # ds4326 = ds.rio.reproject(wgs84)
+
+#         # ds4326.to_netcdf(nc_file)
+#         # print(f"Saved NetCDF: {nc_file}")
+
+#         # -----------------------------
+#         # 3. Plot single map
+#         # -----------------------------
+#         X_abs = FFP["x_2d"] + x0
+#         Y_abs = FFP["y_2d"] + y0
+#         Z = FFP["fclim_2d"]
+
+#         fig, ax = plt.subplots(figsize=(10, 8))
+#         cs = ax.contourf(X_abs, Y_abs, Z, levels=100, cmap="viridis", alpha=0.4)
+#         plt.colorbar(cs, label="Footprint Weight (m$^{-2}$)")
+
+#         for i, rs_val in enumerate(FFP["rs"]):
+#             if FFP["xr"][i] is not None and FFP["yr"][i] is not None:
+#                 xr_arr = np.array(FFP["xr"][i]) + x0
+#                 yr_arr = np.array(FFP["yr"][i]) + y0
+#                 ax.plot(xr_arr, yr_arr, linewidth=1, label=f"{int(rs_val*100)}%")
+
+#         ax.scatter(x0, y0, c="red", marker="^", s=80, label="Tower")
+
+#         # Zoom 80% contour
+#         idx80 = next((i for i, r in enumerate(FFP["rs"]) if r in [80,0.8]), None)
+#         if idx80 is not None and FFP["xr"][idx80] is not None:
+#             xr80 = np.array(FFP["xr"][idx80]) + x0
+#             yr80 = np.array(FFP["yr"][idx80]) + y0
+#             margin = 50
+#             ax.set_xlim(xr80.min() - margin, xr80.max() + margin)
+#             ax.set_ylim(yr80.min() - margin, yr80.max() + margin)
+
+#         google_sat = "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
+#         ctx.add_basemap(ax, source=google_sat, crs="EPSG:3857")
+
+#         ax.set_xlabel("x [m]")
+#         ax.set_ylabel("y [m]")
+#         ax.set_title(f"Monthly Footprint Map ({site_name}, {month_str})")
+#         ax.legend()
+
+#         map_path = os.path.join(config["database"]["base_path"], "FFP_output", site_name, str(year), "map", "Monthly_FFP_maps")
+#         os.makedirs(map_path, exist_ok=True)
+#         map_file = os.path.join(map_path, f"FP_map_{site_name}_{month_str}.png")
+#         plt.savefig(map_file, dpi=100, bbox_inches="tight")
+#         plt.close(fig)
+#         print(f"Saved map: {map_file}")
+
+#     print("Monthly FFP processing complete.")
 
 # ## FFP Monthly Climatology Module
 # def compute_monthly_ffp_climatology(df, config):

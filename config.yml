@@ -1,13 +1,13 @@
 database:
-  base_path: "C:/Users/joyso/Matlab/local_database_new1"
+  base_path:  "C:/Project/New_database/Database"
   years:
-    - 2022
+    - 2024
   site_name:
-    - "YOUNG"
+    - "HOGG"
   levels:
-    - "Clean/ThirdStage"
+    - "Clean/SecondStage"
 tower_height:
-  - 4.08
+  - 4.09
 variables:
   variables_to_read:
     - WS_1_1_1
@@ -17,18 +17,32 @@ variables:
     - USTAR
     - WD_1_1_1
 lat_lon:
-  lat: 50.3623 
-  lon: -100.2024
+  lat: 50.37050
+  lon: -100.53390
 # -----------------------------
 # PIPELINE CONTROL
 # -----------------------------
 pipeline:
-  run_single_ffp: 0
-  run_monthly_ffp: 1
+  run_single_ffp: 1
+  run_monthly_ffp: 0
   run_ndvi_extraction: 0
   run_plot_ffp: 0
 # plot:
 #   zoom_radius: 500
+
+# -----------------------------
+# GEE SETTINGS (NEW)
+# -----------------------------
+gee:
+  project_id: "ee-joysonuh1"
+  scale: 30
+  L8: "LANDSAT/LC08/C02/T1_L2"
+  L9: "LANDSAT/LC09/C02/T1_L2"
+
+output:
+  geotiff_folder: "C:/Project/New_database/NDVI_tif"
+  ndvi_csv: "C:/Project/New_database/NDVI_timeseries.csv"
+  ndvi_plot: "C:/Project/New_database/NDVI_timeseries.png"
 
 # -----------------------------
 # FFP SETTINGS
