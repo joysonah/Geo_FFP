@@ -23,9 +23,9 @@ lat_lon:
 # PIPELINE CONTROL
 # -----------------------------
 pipeline:
-  run_single_ffp: 1
+  run_single_ffp: 0
   run_monthly_ffp: 0
-  run_ndvi_extraction: 0
+  run_ndvi_extraction: 1
   run_plot_ffp: 0
 # plot:
 #   zoom_radius: 500

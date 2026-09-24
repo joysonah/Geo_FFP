@@ -15,13 +15,14 @@ from FFP_module import (
 
 from FFP_module.gee_ndvi import (
     init_gee,
-    single_ndvi,
-    monthly_ndvi,
-    monthly_ndvi_timeseries,
+    # single_ndvi,
+    # monthly_ndvi,
+    # monthly_ndvi_timeseries,
    
-    get_ffp_union_geometry,
-    load_monthly_ffp
+    # get_ffp_union_geometry,
+    #load_monthly_ffp
 )
+
 
 import yaml
 import pandas as pd
@@ -129,8 +130,8 @@ if config["pipeline"].get("run_monthly_ffp", 0) == 1:
 
 else:
 
-    monthly_contours = load_monthly_ffp(config)
-
+    # monthly_contours = load_monthly_ffp(config)
+    print("Loading existing monthly FFP contours...")
 # -----------------------------
 # Step 2: plotting (independent)
 # -----------------------------
@@ -156,7 +157,7 @@ if config["pipeline"].get("run_ndvi_extraction", 0) == 1:
     lat = config["lat_lon"]["lat"]
     lon = config["lat_lon"]["lon"]
 
-    geom = get_ffp_union_geometry(config, monthly_contours, lat, lon)
+    # geom = get_ffp_union_geometry(config, monthly_contours, lat, lon)
    
 
     # --------------------------------
@@ -176,12 +177,12 @@ if config["pipeline"].get("run_ndvi_extraction", 0) == 1:
     # --------------------------------
     # 3. Time series
     # --------------------------------
-    ts = monthly_ndvi_timeseries(geom, config)
+    # ts = monthly_ndvi_timeseries(geom, config)
 
-    df = pd.DataFrame(ts)
-    df.to_csv(config["output"]["ndvi_csv"], index=False)
+    # df = pd.DataFrame(ts)
+    # df.to_csv(config["output"]["ndvi_csv"], index=False)
 
-    print("NDVI pipeline completed successfully")
+    # print("NDVI pipeline completed successfully")
 # -----------------------------
 # Plotting timeseries NDVI
 # -----------------------------
