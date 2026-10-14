@@ -8,7 +8,7 @@ Kljun, N., Calanca, P., Rotach, M. W., & Schmid, H. P. (2015). A simple two-dime
 ```
 Geo_FFP/
 │
-├── main.py
+├── geo_ffp.py
 ├── config.yml
 ├── doc
 ├── requirements.txt
@@ -17,9 +17,9 @@ Geo_FFP/
 │   ├── __init__.py          
 │   ├── calc_footprint_FFP.py
 │   ├── calc_footprint_FFP_climatology.py
-│   ├── monthly_ffp.py
+│   ├── ffp_export.py
 │   ├── FFP_clim_monthly.py
-│   ├── GEE_module.py
+│   ├── gee_ndvi_lai_monthly.py
 │   ├── load_database.py
 ```
 ## Setup
@@ -77,20 +77,36 @@ lat_lon:
 # PIPELINE CONTROL
 # -----------------------------
 pipeline:
-  run_single_ffp: 1
-  run_monthly_ffp: 1
+  run_single_ffp: 0
+  run_monthly_ffp: 0
+  run_ndvi_extraction: 1
+  run_plot_ffp: 0
+
+# -----------------------------
+# GEE SETTINGS (NEW)
+# -----------------------------
+gee:
+  project_id: "your_ID"
+  scale: 30
+  NDVI_SENSOR: "Landsat"
+  LAI_SENSOR: "Sentinel"
+  START_DATE: "2021-01-01"
+  END_DATE: "2025-12-31"
 ```
 2. Run the Geo_FFP
-  ``` python main.py ```
+  ``` python geo_ffp.py ```
 3. Output
    This will generate FFP map, netcdf and FFP model output (as pickle) and will store the output in the database folder with FFP_output (e.g. database\FFP_output).
 ```
   FFP_output/
   ├── Sitename
   │   ├── year  
+  │   │   ├── geotiff
   │   │   ├── map
+  │   │   ├── NDVI_LAI
   │   │   ├── netcdf
   │   │   ├── pickle
+  │   │   ├── shapefile
 ```
 
 **Example**
