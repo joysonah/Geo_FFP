@@ -1430,24 +1430,28 @@ def export_ffp_monthly(
     nc_file = os.path.join(
         output_dir,
         "netcdf",
+        "Monthly",
         basename + ".nc"
     )
 
     tif_file = os.path.join(
         output_dir,
         "geotiff",
+        "Monthly" ,
         basename + ".tif"
     )
 
     shp_file = os.path.join(
         output_dir,
         "shapefile",
+        "Monthly" ,
         basename + "_contours.shp"
     )
 
     tower_file = os.path.join(
         output_dir,
         "shapefile",
+        "Monthly",
         basename + "_tower.shp"
     )
 
