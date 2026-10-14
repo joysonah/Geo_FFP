@@ -3,11 +3,11 @@ database:
   years:
     - 2024
   site_name:
-    - "HOGG"
+    - "YOUNG"
   levels:
     - "Clean/SecondStage"
 tower_height:
-  - 4.09
+  - 4.08
 variables:
   variables_to_read:
     - WS_1_1_1
@@ -17,8 +17,8 @@ variables:
     - USTAR
     - WD_1_1_1
 lat_lon:
-  lat: 50.37050
-  lon: -100.53390
+  lat: 50.36230
+  lon: -100.20242
 # -----------------------------
 # PIPELINE CONTROL
 # -----------------------------
@@ -36,13 +36,11 @@ pipeline:
 gee:
   project_id: "ee-joysonuh1"
   scale: 30
-  L8: "LANDSAT/LC08/C02/T1_L2"
-  L9: "LANDSAT/LC09/C02/T1_L2"
+  NDVI_SENSOR: "Landsat"
+  LAI_SENSOR: "Sentinel"
+  START_DATE: "2021-01-01"
+  END_DATE: "2025-12-31"
 
-output:
-  geotiff_folder: "C:/Project/New_database/NDVI_tif"
-  ndvi_csv: "C:/Project/New_database/NDVI_timeseries.csv"
-  ndvi_plot: "C:/Project/New_database/NDVI_timeseries.png"
 
 # -----------------------------
 # FFP SETTINGS

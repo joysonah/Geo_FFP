@@ -13,7 +13,7 @@ from FFP_module import (
     
 )
 
-from FFP_module.gee_ndvi import (
+from FFP_module.gee_ndvi_lai_monthly import (
     init_gee,
     # single_ndvi,
     # monthly_ndvi,
@@ -38,6 +38,8 @@ import matplotlib.font_manager as fm
 
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 from matplotlib.patches import FancyArrowPatch
+
+from FFP_module.gee_ndvi_lai_monthly import monthly_ndvi_lai
 
 # ---------------------------
 # Load configuration file
@@ -139,67 +141,82 @@ else:
 #     print("Plotting monthly FFP maps...")
 #     plot_monthly_ffp_maps(ds, config)
     
-
 # -----------------------------
-# Run NDVI Extraction
+# Run NDVI + LAI Extraction
 # -----------------------------
 if config["pipeline"].get("run_ndvi_extraction", 0) == 1:
 
-    print("Starting NDVI pipeline...")
+    print("Starting NDVI/LAI pipeline...")
 
     init_gee(config)
 
-    # --------------------------------
-    # INPUT from Geo_FFP
-    # --------------------------------
-    # monthly_contours = ffp_results["contours_80"]
+    df_ndvi_lai = monthly_ndvi_lai(
+        config=config,
 
-    lat = config["lat_lon"]["lat"]
-    lon = config["lat_lon"]["lon"]
+    )
 
-    # geom = get_ffp_union_geometry(config, monthly_contours, lat, lon)
+    print("NDVI/LAI pipeline completed.")
+
+# # -----------------------------
+# # Run NDVI Extraction
+# # -----------------------------
+# if config["pipeline"].get("run_ndvi_extraction", 0) == 1:
+
+#     print("Starting NDVI pipeline...")
+
+#     init_gee(config)
+
+#     # --------------------------------
+#     # INPUT from Geo_FFP
+#     # --------------------------------
+#     # monthly_contours = ffp_results["contours_80"]
+
+#     lat = config["lat_lon"]["lat"]
+#     lon = config["lat_lon"]["lon"]
+
+#     # geom = get_ffp_union_geometry(config, monthly_contours, lat, lon)
    
 
-    # --------------------------------
-    # 1. Single NDVI
-    # --------------------------------
-    # img_single = single_ndvi(geom, config)
-    # export_tif(img_single, geom, "NDVI_full_period", config)
+#     # --------------------------------
+#     # 1. Single NDVI
+#     # --------------------------------
+#     # img_single = single_ndvi(geom, config)
+#     # export_tif(img_single, geom, "NDVI_full_period", config)
 
-    # --------------------------------
-    # 2. Monthly NDVI
-    # --------------------------------
-    # monthly = monthly_ndvi(geom, config)
+#     # --------------------------------
+#     # 2. Monthly NDVI
+#     # --------------------------------
+#     # monthly = monthly_ndvi(geom, config)
 
-    # for m, img in monthly.items():
-    #     export_tif(img, geom, f"NDVI_{m}", config)
+#     # for m, img in monthly.items():
+#     #     export_tif(img, geom, f"NDVI_{m}", config)
 
-    # --------------------------------
-    # 3. Time series
-    # --------------------------------
-    # ts = monthly_ndvi_timeseries(geom, config)
+#     # --------------------------------
+#     # 3. Time series
+#     # --------------------------------
+#     # ts = monthly_ndvi_timeseries(geom, config)
 
-    # df = pd.DataFrame(ts)
-    # df.to_csv(config["output"]["ndvi_csv"], index=False)
+#     # df = pd.DataFrame(ts)
+#     # df.to_csv(config["output"]["ndvi_csv"], index=False)
 
-    # print("NDVI pipeline completed successfully")
-# -----------------------------
-# Plotting timeseries NDVI
-# -----------------------------
-    plt.figure(figsize=(10,4))
+#     # print("NDVI pipeline completed successfully")
+# # -----------------------------
+# # Plotting timeseries NDVI
+# # -----------------------------
+#     plt.figure(figsize=(10,4))
 
-    plt.plot(df["month"], df["NDVI"], marker="o")
+#     plt.plot(df["month"], df["NDVI"], marker="o")
 
-    plt.xticks(rotation=45)
-    plt.ylabel("NDVI")
-    plt.xlabel("Month")
-    plt.title(f"Monthly NDVI Time Series ({site_name[0]}, {years[0]})")
-    plt.grid(True)
+#     plt.xticks(rotation=45)
+#     plt.ylabel("NDVI")
+#     plt.xlabel("Month")
+#     plt.title(f"Monthly NDVI Time Series ({site_name[0]}, {years[0]})")
+#     plt.grid(True)
 
 
-    plt.savefig(config["output"]["ndvi_plot"], dpi=100, bbox_inches="tight")
+#     plt.savefig(config["output"]["ndvi_plot"], dpi=100, bbox_inches="tight")
 
-    plt.show()
+#     plt.show()
 
 # -----------------------------
 # Plotting timeseries NDVI
